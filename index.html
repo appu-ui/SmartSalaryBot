@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SalaryBot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 700px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        #chat-container {
+            border: 1px solid #ccc;
+            height: 400px;
+            padding: 10px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            background: #fff;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 8px;
+            border-radius: 5px;
+            word-break: break-word;
+        }
+        .assistant {
+            background-color: #f0f0f0;
+            text-align: left;
+        }
+        .user {
+            background-color: #e3f2fd;
+            text-align: right;
+        }
+        #input-container {
+            display: flex;
+            gap: 10px;
+        }
+        #user-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #send-button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #send-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        ul, ol {
+            margin: 8px 0 8px 20px;
+            padding: 0;
+        }
+        li {
+            margin-bottom: 6px;
+        }
+        strong {
+            font-weight: 600;
+        }
+    </style>
+    <!-- Import marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <h1>Smart-Salary chatbot</h1>
+    <div id="chat-container"></div>
+    <div id="input-container">
+        <input type="text" id="user-input" placeholder="Type your response..." disabled>
+        <button id="send-button" onclick="sendMessage()" disabled>Send</button>
+    </div>
+
+    <script>
+        let currentStep = null;
+        let conversationId = null;
+        let lastMessageCount = 0;
+
+        async function startChat() {
+            lastMessageCount = 0;
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+                handleChatResponse(data);
+            } catch (error) {
+                addMessage('Error starting chat. Please try again.', 'assistant');
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('user-input');
+            const userText = input.value.trim();
+
+            if (!userText) return;
+
+            addMessage(userText, 'user');
+            input.value = '';
+            disableInput();
+
+            try {
+                let payload = { conversation_id: conversationId };
+                if (currentStep === 'ask_name') {
+                    payload.name = userText;
+                } else if (currentStep === 'ask_salary') {
+                    const salary = parseFloat(userText);
+                    if (isNaN(salary) || salary <= 0) {
+                        addMessage('Please enter a valid positive number for your salary.', 'assistant');
+                        enableInput();
+                        return;
+                    }
+                    payload.salary = salary;
+                } else if (currentStep === 'followup') {
+                    payload.followup_question = userText;
+                }
+
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                handleChatResponse(data);
+
+            } catch (error) {
+                addMessage(`Error: ${error.message}`, 'assistant');
+                enableInput();
+            }
+        }
+
+        function handleChatResponse(data) {
+            currentStep = data.step;
+            conversationId = data.conversation_id;
+            displayMessages(data.messages);
+
+            if (data.conversation_ended) {
+                setTimeout(() => {
+                    addMessage('Would you like to start a new conversation? Refresh the page.', 'assistant');
+                }, 1000);
+                disableInput();
+            } else {
+                enableInput();
+            }
+        }
+
+        function displayMessages(messages) {
+            const newMessages = messages.slice(lastMessageCount);
+            newMessages.forEach(message => {
+                if (message.role === 'assistant') {
+                    addMessage(message.content, 'assistant');
+                }
+            });
+            lastMessageCount = messages.length;
+        }
+
+        function addMessage(text, sender) {
+            const chatContainer = document.getElementById('chat-container');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            // If assistant, render markdown
+            if (sender === 'assistant') {
+                messageDiv.innerHTML = marked.parse(text);
+            } else {
+                messageDiv.textContent = text;
+            }
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function enableInput() {
+            const input = document.getElementById('user-input');
+            const button = document.getElementById('send-button');
+            input.disabled = false;
+            button.disabled = false;
+            if (currentStep === 'ask_name') {
+                input.placeholder = 'Type your name...';
+            } else if (currentStep === 'ask_salary') {
+                input.type = 'number';
+                input.placeholder = 'Enter your monthly salary in numbers';
+            } else if (currentStep === 'followup') {
+                input.placeholder = 'Ask a follow-up question or say "thanks" to end...';
+            } else {
+                input.placeholder = 'Type your response...';
+            }
+            input.focus();
+        }
+
+        function disableInput() {
+            const input = document.getElementById('user-input');
+            const button = document.getElementById('send-button');
+            input.disabled = true;
+            button.disabled = true;
+        }
+
+        document.getElementById('user-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        window.onload = startChat;
+    </script>
+</body>
+</html>
