@@ -186,13 +186,16 @@
             input.disabled = false;
             button.disabled = false;
             if (currentStep === 'ask_name') {
+                input.type = 'text'; 
                 input.placeholder = 'Type your name...';
             } else if (currentStep === 'ask_salary') {
                 input.type = 'number';
                 input.placeholder = 'Enter your monthly salary in numbers';
             } else if (currentStep === 'followup') {
+                input.type = 'text'; 
                 input.placeholder = 'Ask a follow-up question or say "thanks" to end...';
             } else {
+                input.type = 'text';
                 input.placeholder = 'Type your response...';
             }
             input.focus();
